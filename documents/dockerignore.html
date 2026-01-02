@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How to Create a .dockerignore File</title>
+    <style>
+        body { font-family: sans-serif; line-height: 1.6; padding: 20px; }
+        h1, h2 { color: #333; }
+        code { background-color: #f4f4f4; padding: 2px 6px; border-radius: 4px; }
+        pre { background-color: #f4f4f4; padding: 10px; border-radius: 4px; white-space: pre-wrap; }
+    </style>
+</head>
+<body>
+
+    <h1>How to Create a <code>.dockerignore</code> File</h1>
+    <p>
+        The <code>.dockerignore</code> file prevents files from being copied into your Docker image. This is crucial for keeping your image small and for security. Create a file named <code>.dockerignore</code> in the same directory as your <code>Dockerfile</code> and add one of the following sets of rules.
+    </p>
+
+    <hr>
+
+    <h2>Option 1: Ignore Everything Except Specific Files (Recommended)</h2>
+    <p>
+        This is the most robust method. It ignores all files and then creates exceptions for only the files you need. This ensures no unintended files (like system files, logs, or new files you add later) are accidentally included.
+    </p>
+    <pre><code># Ignore everything in the build context
+**/*
+
+# Allow specific files needed for the application
+!api.py
+!config.json
+!requirements.txt
+</code></pre>
+    <p>
+        <strong>How it works:</strong> The <code>**/*</code> pattern tells Docker to ignore every file and directory. The <code>!</code> prefix then negates the rule for the specified files, allowing them to be included.
+    </p>
+
+    <hr>
+
+    <h2>Option 2: Ignore Specific Files and Folders</h2>
+    <p>
+        This approach involves explicitly listing the files and directories you wish to exclude. This can be useful in smaller projects but requires you to update the file every time you add a new directory that should be ignored.
+    </p>
+    <pre><code># Ignore the Python virtual environment
+.venv
+
+# Ignore VS Code settings
+.vscode
+
+# Ignore Docker related files that are not needed inside the image
+Dockerfile
+
+# Ignore any .dockerignore file itself
+.dockerignore
+</code></pre>
+    <p>
+        <strong>How it works:</strong> Each line specifies a file or directory (relative to the build context) that Docker should ignore during the <code>COPY</code> or <code>ADD</code> operations. Since <code>requirements.txt</code> is no longer in this list, it will be included.
+    </p>
+
+</body>
+</html>

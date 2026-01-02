@@ -1,0 +1,14 @@
+# Ignore the Python virtual environment
+.venv
+
+# Ignore VS Code settings
+.vscode
+
+# Ignore Docker related files that are not needed inside the image
+Dockerfile
+
+# Ignore any .dockerignore file itself
+.dockerignore
+
+# Ignore any documents
+documents

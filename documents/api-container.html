@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guide: Running Flask API with Gunicorn in Docker (Python 3.7)</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 0 20px;
+            background-color: #f9f9f9;
+        }
+        h1, h2, h3 {
+            color: #2c3e50;
+            border-bottom: 2px solid #ecf0f1;
+            padding-bottom: 10px;
+        }
+        code {
+            background-color: #ecf0f1;
+            color: #c0392b;
+            padding: 3px 5px;
+            border-radius: 4px;
+            font-family: "Courier New", Courier, monospace;
+        }
+        pre {
+            background-color: #2c3e50;
+            color: #ecf0f1;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        pre code {
+            background-color: transparent;
+            color: inherit;
+            padding: 0;
+        }
+        .note {
+            background-color: #e8f6fd;
+            border-left: 5px solid #3498db;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .filename {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 5px;
+            font-family: "Courier New", Courier, monospace;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Guide: Running Your <code>flask-api.py</code> with Gunicorn in Docker (Python 3.7)</h1>
+
+    <p>
+        This document provides a step-by-step guide on how to containerize your <code>flask-api.py</code> application using Docker, specifically with Python 3.7 and Gunicorn as the WSGI server.
+    </p>
+
+    <h2>Prerequisites</h2>
+    <ul>
+        <li><strong>Docker Desktop</strong> installed and running on your machine.</li>
+        <li>Your <code>flask-api.py</code> file.</li>
+    </ul>
+
+    <h2>Step 1: Organize Your Project</h2>
+    <p>
+        Create a new folder (e.g., <code>my-flask-app-py37</code>) and place your <code>flask-api.py</code> file inside it.
+    </p>
+    <pre><code>my-flask-app-py37/
+└── flask-api.py</code></pre>
+
+    <h2>Step 2: Create a <code>requirements.txt</code> File</h2>
+    <p>
+        Your Flask application requires <code>Flask</code> and will be served by <code>gunicorn</code>. Create a file named <code>requirements.txt</code> in the same directory.
+    </p>
+    <span class="filename">requirements.txt</span>
+    <pre><code>Flask
+gunicorn</code></pre>
+    <p>Your project structure should now look like this:</p>
+    <pre><code>my-flask-app-py37/
+├── flask-api.py
+└── requirements.txt</code></pre>
+
+    <h2>Step 3: Create the <code>Dockerfile</code></h2>
+    <p>
+        The <code>Dockerfile</code> contains instructions for building your Docker image. Create a file named <code>Dockerfile</code> (no extension) in your project directory.
+    </p>
+    <span class="filename">Dockerfile</span>
+    <pre><code># Use an official Python 3.7 runtime as a parent image
+FROM python:3.7-slim
+
+# Set the working directory inside the container
+WORKDIR /app
+
+# Copy the requirements file into the container at /app
+COPY requirements.txt .
+
+# Install any needed packages specified in requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the rest of the application code into the container at /app
+COPY . .
+
+# Make port 8000 available to the world outside this container (Gunicorn's default)
+EXPOSE 8000
+
+# Define the command to run your app with Gunicorn
+# "flask-api:app" assumes your Flask app instance is named 'app' in flask-api.py
+# -b 0.0.0.0:8000 binds Gunicorn to all network interfaces on port 8000
+CMD ["gunicorn", "flask-api:app", "-b", "0.0.0.0:8000"]
+</code></pre>
+    <p><strong>Explanation of the Dockerfile:</strong></p>
+    <ul>
+        <li><code>FROM python:3.7-slim</code>: Specifies the base image as a lightweight Python 3.7 runtime, as requested.</li>
+        <li><code>WORKDIR /app</code>: Sets the working directory inside the container to <code>/app</code>.</li>
+        <li><code>COPY requirements.txt .</code>: Copies your <code>requirements.txt</code> file into the container.</li>
+        <li><code>RUN pip install --no-cache-dir -r requirements.txt</code>: Installs Flask and Gunicorn. <code>--no-cache-dir</code> reduces image size.</li>
+        <li><code>COPY . .</code>: Copies your <code>flask-api.py</code> and any other project files into the container.</li>
+        <li><code>EXPOSE 8000</code>: Informs Docker that the container will listen on port 8000, which is Gunicorn's default.</li>
+        <li><code>CMD ["gunicorn", "flask-api:app", "-b", "0.0.0.0:8000"]</code>: This command starts Gunicorn.
+            <ul>
+                <li><code>flask-api:app</code>: Tells Gunicorn to find the Flask application instance named <code>app</code> within the <code>flask-api.py</code> module.</li>
+                <li><code>-b 0.0.0.0:8000</code>: Binds Gunicorn to all available network interfaces (<code>0.0.0.0</code>) on port <code>8000</code>, making it accessible from outside the container.</li>
+            </ul>
+        </li>
+    </ul>
+    <p>Your final project structure:</p>
+    <pre><code>my-flask-app-py37/
+├── Dockerfile
+├── flask-api.py
+└── requirements.txt</code></pre>
+
+    <h2>Step 4: Build the Docker Image</h2>
+    <p>
+        Open a terminal or command prompt, navigate to your <code>my-flask-app-py37</code> directory, and run the following command. This builds your Docker image and tags it.
+    </p>
+    <pre><code>docker build -t my-flask-api-gunicorn-py37 .</code></pre>
+    <p>
+        The <code>.</code> at the end tells Docker to use the current directory as the build context.
+    </p>
+
+    <h2>Step 5: Run the Docker Container</h2>
+    <p>
+        Once the image is built, run it as a container:
+    </p>
+    <pre><code>docker run -d -p 5000:8000 my-flask-api-gunicorn-py37</code></pre>
+    <ul>
+        <li><code>-d</code>: Runs the container in detached mode (background).</li>
+        <li><code>-p 5000:8000</code>: Maps port 5000 on your host machine to port 8000 in the container (where Gunicorn is listening).</li>
+        <li><code>my-flask-api-gunicorn-py37</code>: The name of the image to run.</li>
+    </ul>
+
+    <h2>Step 6: Verify It's Running</h2>
+    <p>
+        Your Flask API should now be running inside a Docker container. Access it by opening a web browser and navigating to:
+    </p>
+    <ul>
+        <li><strong>API Landing Page:</strong> <a href="http://localhost:5000/" target="_blank">http://localhost:5000/</a></li>
+        <li><strong>Sample API Request:</strong> <a href="http://localhost:5000/api?value=10" target="_blank">http://localhost:5000/api?value=10</a></li>
+    </ul>
+    <p>You should see the HTML description and the JSON response, respectively, served from your containerized application.</p>
+
+</body>
+</html>

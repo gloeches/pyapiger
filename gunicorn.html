@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gunicorn Server Proposal</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; line-height: 1.6; color: #333; max-width: 800px; margin: 20px auto; padding: 0 20px; }
+        h1, h2, h3 { color: #2c3e50; }
+        pre { background-color: #f4f4f8; padding: 15px; border-radius: 5px; white-space: pre-wrap; word-wrap: break-word; border: 1px solid #ddd; }
+        code { font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace; }
+        .container { background-color: #fff; padding: 25px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+        .explanation { margin-top: 10px; border-left: 4px solid #3498db; padding-left: 15px; font-size: 0.95em; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Proposal: Gunicorn-based Web Server for Agent Environment</h1>
+
+    <h2>Overview</h2>
+    <p>
+        This script serves as the primary entry point for launching the web arena agent environment. It configures and starts a web server using Gunicorn to host the agent's application. The server is designed to be accessible via a specified host and port, enabling interaction with the agent. The script initializes and runs a web server for the agent environment. It utilizes <code>argparse</code> to define command-line arguments for server configuration, specifically <code>--port</code>, <code>--host</code>, and <code>--workers</code>.
+    </p>
+
+    <h2>Core Component: Custom Gunicorn Application</h2>
+    <p>
+        To programmatically control the Gunicorn server from within our script, a custom application class, <code>CustomGunicornApp</code>, is defined. This class integrates our Flask application (imported from <code>.server</code>) with Gunicorn by inheriting from <code>gunicorn.app.base.BaseApplication</code> and customizing its configuration and application loading mechanisms.
+    </p>
+
+    <h3>Code Implementation</h3>
+    <pre><code>class CustomGunicornApp(BaseApplication):
+    def __init__(self, app, options=None):
+        self.options = options or {}
+        self.application = app
+        super().__init__()
+
+    def load_config(self):
+        for key, value in self.options.items():
+            if key in self.cfg.settings and value is not None:
+                self.cfg.set(key.lower(), value)
+
+    def load(self):
+        return self.application</code></pre>
+
+    <h3>Code Explanation</h3>
+    <div class="explanation">
+        <p>The <code>CustomGunicornApp</code> class acts as a bridge, allowing our Python script to configure and run a Gunicorn server instance.</p>
+        <ul>
+            <li><strong><code>__init__(self, app, options=None)</code></strong>: The constructor method initializes the application.
+                <ul>
+                    <li><code>app</code>: This is the web application instance (e.g., a Flask app) that Gunicorn will serve.</li>
+                    <li><code>options</code>: A dictionary containing Gunicorn configuration settings, such as <code>bind</code> (host and port), <code>workers</code> (number of processes), or <code>timeout</code>.</li>
+                </ul>
+            </li>
+            <li><strong><code>load_config(self)</code></strong>: This method is overridden from Gunicorn's <code>BaseApplication</code>. It iterates through the <code>options</code> dictionary provided during initialization and applies each valid setting to Gunicorn's internal configuration object (<code>self.cfg</code>). This is the key to programmatically configuring Gunicorn.</li>
+            <li><strong><code>load(self)</code></strong>: This method is also required by Gunicorn. It's responsible for returning the actual web application instance that Gunicorn will run. Here, it simply returns the <code>app</code> that was passed into the constructor.</li>
+        </ul>
+    </div>
+
+    <h2>Launch Sequence</h2>
+    <p>
+        The main launch function will parse command-line arguments, assemble the Gunicorn options dictionary (including the binding address, worker count, and timeout), and then start the server. This is achieved by creating an instance of <code>CustomGunicornApp</code> with the Flask app and the configured options, and then calling its <code>run()</code> method.
+    </p>
+
+    <hr>
+
+    <h2>Recommended Docker Implementation</h2>
+    <p>
+        To containerize this application effectively, it's important to handle process signals (like <code>SIGTERM</code> from <code>docker stop</code>) correctly for graceful shutdowns. A common Docker warning arises when using the "shell form" of the <code>CMD</code> instruction, as it can prevent these signals from reaching the application.
+    </p>
+    <p>
+        The recommended approach is to centralize the application's startup logic within an <code>entrypoint.sh</code> script. This ensures that <code>gunicorn</code> runs as the main process (PID 1) inside the container and receives signals directly.
+    </p>
+
+    <h3>1. The `entrypoint.sh` Script</h3>
+    <p>
+        This script becomes responsible for starting the Gunicorn server. It reads the <code>API_PORT</code> environment variable to configure the port dynamically.
+    </p>
+    <pre><code>#!/bin/sh
+# entrypoint.sh
+
+# Default to port 8000 if API_PORT is not set or empty
+PORT=${API_PORT:-8000}
+
+# Use exec to replace the shell process with gunicorn.
+# This makes gunicorn the main process, allowing it to receive signals directly.
+echo "Starting gunicorn on port $PORT"
+exec gunicorn flask-api:app -b 0.0.0.0:$PORT
+</code></pre>
+    <div class="explanation">
+        <ul>
+            <li><code>PORT=\${API_PORT:-8000}</code>: This line safely reads the <code>API_PORT</code> environment variable. If the variable is not set or is empty, it defaults to <code>8000</code>.</li>
+            <li><code>exec gunicorn...</code>: The <code>exec</code> command replaces the current shell process with the <code>gunicorn</code> process. This is crucial for proper signal handling, as it avoids leaving a shell process to intercept signals from Docker.</li>
+        </ul>
+    </div>
+
+    <h3>2. The `Dockerfilegunicorn`</h3>
+    <p>
+        The Dockerfile sets up the environment, copies the files, and designates <code>entrypoint.sh</code> as the startup command. The <code>CMD</code> instruction is no longer needed, as the entrypoint now handles the entire command.
+    </p>
+    <pre><code># Use an official Python runtime as a parent image
+FROM python:3.13-slim
+
+WORKDIR /app
+
+# Set the environment variable for the API port
+ENV API_PORT=8000
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+# Make the entrypoint script executable
+RUN chmod +x entrypoint.sh
+
+# Expose the port defined by the environment variable
+EXPOSE 8000
+
+# Set the entrypoint to run our script.
+# This uses the "exec form" which is the recommended practice.
+ENTRYPOINT ["./entrypoint.sh"]
+
+# CMD is no longer needed as the entrypoint handles execution
+</code></pre>
+    <div class="explanation">
+        <ul>
+            <li><code>ENV API_PORT=8000</code>: Sets the default port as an environment variable in the container. This can be easily overridden at runtime (e.g., <code>docker run -e API_PORT=5000 ...</code>).</li>
+            <li><code>ENTRYPOINT ["./entrypoint.sh"]</code>: This uses the "exec form" of <code>ENTRYPOINT</code>. It directly runs the script, which is the recommended practice for ensuring correct signal handling.</li>
+        </ul>
+    </div>
+</div>
+
+</body>
+</html>

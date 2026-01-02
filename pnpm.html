@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PNPM Command and Workspace Guide</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 800px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+        h1, h2, h3 {
+            color: #2c3e50;
+        }
+        code {
+            background-color: #f4f4f4;
+            padding: 0.2em 0.4em;
+            margin: 0;
+            font-size: 85%;
+            border-radius: 3px;
+            font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+        }
+        pre {
+            background-color: #f4f4f4;
+            padding: 1em;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        .container {
+            background-color: #fff;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>PNPM Command and Workspace Guide</h1>
+
+        <section id="workspace-yaml">
+            <h2>The <code>pnpm-workspace.yaml</code> File</h2>
+            <p>
+                The <code>pnpm-workspace.yaml</code> file is the configuration file used to define and manage a <a href="https://pnpm.io/workspaces">pnpm workspace</a>. Its primary use is for monorepos, where you manage multiple projects or packages within a single, top-level repository.
+            </p>
+            <p>
+                This file allows you to specify which directories contain the projects that are part of the workspace. Beyond that, it can be used to set configuration options that apply to the entire workspace.
+            </p>
+            <p>
+                A key example of such a configuration is the <code>minimumReleaseAge</code> setting. When you set this option in <code>pnpm-workspace.yaml</code>, you enforce a rule across all projects in the workspace that prevents the installation of package versions that have been published more recently than the specified duration. This helps improve stability by avoiding brand-new, potentially buggy package releases. The value is a number that represents a duration in <strong>minutes</strong>. For example, to set a delay of 24 hours, you would use the value <code>1440</code>.
+            </p>
+            <h3>Example <code>pnpm-workspace.yaml</code>:</h3>
+            <pre><code># Defines the packages that are part of the workspace
+packages:
+  - 'packages/*'
+  - 'apps/*'
+
+# Workspace-wide settings
+# The value is in minutes. 1440 minutes = 24 hours.
+minimumReleaseAge: 1440
+</code></pre>
+        </section>
+
+        <hr>
+
+        <section id="commands">
+            <h2>Common PNPM Commands</h2>
+            <p>Here are some of the basic commands for managing packages in a pnpm project.</p>
+
+            <h3>1. Installing a Package</h3>
+            <p>To add a new package to your project, use the <code>pnpm add</code> command. This will install the package into your <code>node_modules</code> directory and add it as a dependency in your <code>package.json</code> file.</p>
+            <pre><code>pnpm add &lt;package-name&gt;</code></pre>
+            <p>For example, to install <code>@types/node</code>:</p>
+            <pre><code>pnpm add @types/node</code></pre>
+
+            <h3>2. Listing an Installed Package</h3>
+            <p>To check the currently installed version of a specific package, use the <code>pnpm list</code> command.</p>
+            <pre><code>pnpm list &lt;package-name&gt;</code></pre>
+            <p>For example, to see the installed version of <code>@types/node</code>:</p>
+            <pre><code>pnpm list @types/node</code></pre>
+
+            <h3>3. Uninstalling a Package</h3>
+            <p>To remove a package from your project, use the <code>pnpm remove</code> (or <code>pnpm rm</code>) command. This will uninstall the package and remove it from your <code>package.json</code>.</p>
+            <pre><code>pnpm remove &lt;package-name&gt;</code></pre>
+            <p>For example, to uninstall <code>@types/node</code>:</p>
+            <pre><code>pnpm remove @types/node</code></pre>
+        </section>
+    </div>
+</body>
+</html>

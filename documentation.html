@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Documentation</title>
+    <style>
+        body { font-family: sans-serif; line-height: 1.6; padding: 20px; }
+        h1, h2, h3 { color: #333; }
+        code { background-color: #f4f4f4; padding: 2px 4px; border-radius: 4px; }
+        pre { background-color: #f4f4f4; padding: 10px; border-radius: 4px; white-space: pre-wrap; }
+    </style>
+</head>
+<body>
+
+    <h1>Project Documentation</h1>
+
+    <h2>Introduction</h2>
+    <p>This document explains the components of a containerized Flask application. The application's configuration is dynamically generated at runtime based on environment variables, and it's designed to be flexible and easy to use with Docker.</p>
+
+    <h2><code>config_generator.py</code></h2>
+    <p>This script is responsible for generating the <code>config.json</code> file, which holds the application's configuration.</p>
+    <pre><code>
+import os
+import json
+
+def generate_config():
+    production_env = os.environ.get("PRODUCTION", "false").lower() == "true"
+    api_port = os.environ.get("API_PORT", 5000)
+    
+    if production_env:
+        config_data = {"DDBB-SERVER": "PRODUCTION", "API-PORT": api_port}
+    else:
+        config_data = {"DDBB-SERVER": "DEVELOPMENT", "API-PORT": api_port}
+        
+    with open("config.json", "w") as config_file:
+        json.dump(config_data, config_file, indent=4)
+    print(f"El puerto es {api_port}")    
+    print(f"la compilación:  {production_env}")   
+if __name__ == "__main__":
+    print("Generating configuration file...")
+    generate_config()
+    </code></pre>
+    <h3>Explanation:</h3>
+    <ul>
+        <li>It reads the <code>PRODUCTION</code> environment variable. If it's set to "true", the <code>DDBB-SERVER</code> in <code>config.json</code> will be "PRODUCTION"; otherwise, it will be "DEVELOPMENT".</li>
+        <li>It reads the <code>API_PORT</code> environment variable. If it's not set, it defaults to <code>5000</code>.</li>
+        <li>It writes the configuration to a file named <code>config.json</code>.</li>
+    </ul>
+
+    <h2><code>flask-api.py</code></h2>
+    <p>This is the main Flask application file.</p>
+    <pre><code>
+# flask-app.py
+from flask import Flask, request
+import json
+
+# create a Flask instance
+app = Flask(__name__)
+
+# Load configuration from config.json
+print(f"flask-api.py is opening config.json to load the configuration")   
+with open('config.json') as config_file:
+    config = json.load(config_file)
+
+app.config.update(config)
+
+# a simple description of the API written in html.
+# Flask can print and return raw text to the browser. 
+# This enables html, json, etc. 
+
+description =   """
+                &lt;!DOCTYPE html&gt;
+                &lt;head&gt;
+                &lt;title&gt;API Landing&lt;/title&gt;
+                &lt;/head&gt;
+                &lt;body&gt;  
+                    &lt;h3&gt;A simple API using Flask&lt;/h3&gt;
+                    &lt;p&gt;DDBB-SERVER: {db_server}&lt;/p&gt;
+                    &lt;p&gt;API_PORT: {port}&lt;/p&gt;
+                    &lt;a href="http://localhost:{port}/api?value=2"&gt;sample request&lt;/a&gt;
+                &lt;/body&gt;
+                """.format(db_server=app.config.get('DDBB-SERVER'), port=app.config.get('API-PORT'))
+				
+# Routes refer to url'
+# our root url '/' will show our html description
+@app.route('/', methods=['GET'])
+def hello_world():
+    # return a html format string that is rendered in the browser
+	return description
+
+# our '/api' url
+# requires user integer argument: value
+# returns error message if wrong arguments are passed.
+@app.route('/api', methods=['GET'])
+def square():
+    if not all(k in request.args for k in (["value"])):
+        # we can also print dynamically 
+        # using python f strings and with 
+        # html elements such as line breaks (&lt;br&gt;)
+        error_message = (
+            f"Required paremeters : 'value'&lt;br&gt;"
+            f"Supplied paremeters : {[k for k in request.args]}"
+        )
+        return error_message
+    else:
+        # assign and cast variable to int
+        value = int(request.args['value'])
+        # or use the built in get method and assign a type
+        # http://werkzeug.palletsprojects.com/en/0.15.x/datastructures/#werkzeug.datastructures.MultiDict.get
+        value = request.args.get('value', type=int)
+        return json.dumps({"Value Squared" : value**2})
+
+if __name__ == "__main__":
+	# for debugging locally
+	# app.run(debug=True, host='0.0.0.0',port=app.config.get('API-PORT'))
+	
+	# for production
+	app.run(host='0.0.0.0', port=app.config.get('API-PORT'))
+    </code></pre>
+    <h3>Explanation:</h3>
+    <ul>
+        <li>It's a simple Flask application with two routes: <code>/</code> and <code>/api</code>.</li>
+        <li>It reads the <code>config.json</code> file to get its configuration.</li>
+        <li>The <code>/</code> route displays a simple HTML page with the current <code>DDBB-SERVER</code> and <code>API-PORT</code>.</li>
+        <li>The <code>/api</code> route takes a <code>value</code> argument and returns its square in JSON format.</li>
+        <li>The application runs on the host and port specified in the <code>config.json</code> file.</li>
+    </ul>
+
+    <h2><code>Dockerfileflask</code></h2>
+    <p>This file contains the instructions to build the Docker image for the application.</p>
+    <pre><code>
+# Use an official Python 3.13 runtime as a parent image
+FROM python:3.13-slim
+
+# Set the working directory inside the container
+WORKDIR /app
+
+# Add a build-time argument for the port
+ARG port=5000
+
+# Copy the requirements file into the container at /app
+COPY requirements.txt .
+
+# Install any needed packages specified in requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --upgrade pip
+
+# Copy the rest of the application code into the container at /app
+COPY . .
+
+# Make the entrypoint script executable
+RUN chmod +x entrypoint.sh
+
+# Make port available to the world outside this container
+EXPOSE $port
+
+# Set the entrypoint
+ENTRYPOINT ["./entrypoint.sh"]
+
+# Define the command to run your app
+CMD ["python", "flask-api.py"]
+    </code></pre>
+    <h3>Explanation:</h3>
+    <ul>
+        <li><code>FROM python:3.13-slim</code>: Specifies the base image for the container.</li>
+        <li><code>WORKDIR /app</code>: Sets the working directory inside the container to <code>/app</code>.</li>
+        <li><code>ARG port=5000</code>: Defines a build-time argument for the port with a default value of 5000.</li>
+        <li><code>COPY requirements.txt .</code>: Copies the <code>requirements.txt</code> file to the container.</li>
+        <li><code>RUN pip install --no-cache-dir -r requirements.txt</code>: Installs the Python dependencies.</li>
+        <li><code>COPY . .</code>: Copies the rest of the application code to the container.</li>
+        <li><code>RUN chmod +x entrypoint.sh</code>: Makes the <code>entrypoint.sh</code> script executable.</li>
+        <li><code>EXPOSE $port</code>: Informs Docker that the container listens on the specified port at runtime.</li>
+        <li><code>ENTRYPOINT ["./entrypoint.sh"]</code>: Sets the entrypoint for the container. This command will always be executed when the container starts.</li>
+        <li><code>CMD ["python", "flask-api.py"]</code>: Provides the default command to be executed by the entrypoint.</li>
+    </ul>
+
+    <h2><code>entrypoint.sh</code>, <code>ENTRYPOINT</code>, and <code>CMD</code></h2>
+    <p>The <code>entrypoint.sh</code> script is the key to running the configuration generator before the main application.</p>
+    <pre><code>
+#!/bin/sh
+# entrypoint.sh
+
+# Run the config generator
+python config_generator.py
+
+# Now, execute the command passed to this script (the Dockerfile's CMD)
+exec "$@"
+    </code></pre>
+    <h3><code>ENTRYPOINT</code> vs. <code>CMD</code></h3>
+    <p>In Docker, <code>ENTRYPOINT</code> and <code>CMD</code> are two instructions that define what command is executed when a container is started. They can be used together or separately.</p>
+    <ul>
+        <li><strong><code>ENTRYPOINT</code></strong>: Specifies the main command that is always executed when the container starts. It's not meant to be overridden often.</li>
+        <li><strong><code>CMD</code></strong>: Provides default arguments for the <code>ENTRYPOINT</code>. The <code>CMD</code> can be easily overridden from the `docker run` command line.</li>
+    </ul>
+    <h3>How They Work Together in This Project</h3>
+    <p>In this project, we use both <code>ENTRYPOINT</code> and <code>CMD</code> to ensure that the configuration is always generated before the application starts.</p>
+    <ol>
+        <li>When the container starts, Docker executes the <code>ENTRYPOINT</code>, which is <code>./entrypoint.sh</code>.</li>
+        <li>The <code>entrypoint.sh</code> script first runs <code>python config_generator.py</code> to create the <code>config.json</code> file.</li>
+        <li>The last line of the script is <code>exec "$@"</code>. This is a special shell command that replaces the current process (the script itself) with the command passed as arguments to the script. In this case, the arguments are the contents of the <code>CMD</code> instruction from the Dockerfile, which is <code>["python", "flask-api.py"]</code>.</li>
+        <li>So, after the config is generated, the script executes <code>python flask-api.py</code>, and the Flask application starts.</li>
+    </ol>
+    <p>This pattern is very useful for running initialization tasks before starting the main application in a container.</p>
+
+    <h2>How to Build and Run the Docker Container</h2>
+    <h3>Build the Image</h3>
+    <p>To build the Docker image, run the following command in the same directory as the <code>Dockerfileflask</code>:</p>
+    <pre><code>docker build -f Dockerfileflask -t gloeches/flask-api:01.00 .</code></pre>
+    <p>If you want to expose a different port, you can use the <code>--build-arg</code> flag:</p>
+    <pre><code>docker build -f Dockerfileflask --build-arg port=8080 -t gloeches/flask-api:01.00 .</code></pre>
+
+    <h3>Run the Container</h3>
+    <p>To run the container, use the following command:</p>
+    <pre><code>docker run -d --name flask-dev -p 2000:2000 -e API_PORT=2000 gloeches/flask-api:01.00</code></pre>
+    <h3>Explanation of the `docker run` command:</h3>
+    <ul>
+        <li><code>-d</code>: Runs the container in detached mode.</li>
+        <li><code>--name flask-dev</code>: Assigns the name "flask-dev" to the container.</li>
+        <li><code>-p 2000:2000</code>: Maps port 2000 on the host to port 2000 in the container.</li>
+        <li><code>-e API_PORT=2000</code>: Sets the <code>API_PORT</code> environment variable inside the container to 2000.</li>
+        <li><code>gloeches/flask-api:01.00</code>: The name of the image to run.</li>
+    </ul>
+
+</body>
+</html>

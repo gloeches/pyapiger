@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guide: Running a Flask API in Docker</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 0 20px;
+            background-color: #f9f9f9;
+        }
+        h1, h2, h3 {
+            color: #2c3e50;
+            border-bottom: 2px solid #ecf0f1;
+            padding-bottom: 10px;
+        }
+        code {
+            background-color: #ecf0f1;
+            color: #c0392b;
+            padding: 3px 5px;
+            border-radius: 4px;
+            font-family: "Courier New", Courier, monospace;
+        }
+        pre {
+            background-color: #2c3e50;
+            color: #ecf0f1;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        pre code {
+            background-color: transparent;
+            color: inherit;
+            padding: 0;
+        }
+        .note {
+            background-color: #e8f6fd;
+            border-left: 5px solid #3498db;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .filename {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 5px;
+            font-family: "Courier New", Courier, monospace;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Guide: Running Your <code>flask-api.py</code> in a Docker Container</h1>
+
+    <p>
+        This document provides a step-by-step guide on how to containerize your <code>flask-api.py</code> application using Docker. This approach ensures your application runs in a consistent and isolated environment, making it easily portable.
+    </p>
+
+    <div class="note">
+        <h4>A Note on Virtual Environments (like <code>virtualenv</code>)</h4>
+        <p>
+            You mentioned using <code>pip virtualenv</code>. In a typical Docker workflow, you do <strong>not</strong> need to create a virtual environment inside the container. The Docker container itself acts as the isolated environment. The <code>Dockerfile</code> will define the Python environment and its dependencies directly.
+        </p>
+    </div>
+
+    <h2>Prerequisites</h2>
+    <ul>
+        <li><strong>Docker Desktop</strong> installed and running on your machine.</li>
+        <li>Your <code>flask-api.py</code> file.</li>
+    </ul>
+
+    <h2>Step 1: Organize Your Project</h2>
+    <p>
+        It's best practice to have a clean project directory. Create a new folder (e.g., <code>my-flask-app</code>) and place your <code>flask-api.py</code> file inside it.
+    </p>
+    <pre><code>my-flask-app/
+└── flask-api.py</code></pre>
+
+    <h2>Step 2: Create a <code>requirements.txt</code> File</h2>
+    <p>
+        Your Flask application depends on the <code>Flask</code> library. Docker's build process needs to know which Python packages to install. Create a file named <code>requirements.txt</code> in the same directory.
+    </p>
+    <span class="filename">requirements.txt</span>
+    <pre><code>Flask</code></pre>
+    <p>Your project structure should now look like this:</p>
+    <pre><code>my-flask-app/
+├── flask-api.py
+└── requirements.txt</code></pre>
+
+    <h2>Step 3: Create the Dockerfile</h2>
+    <p>
+        The <code>Dockerfile</code> is a script that contains instructions for building your Docker image. Create a file named <code>Dockerfile</code> (no extension) in your project directory.
+    </p>
+    <span class="filename">Dockerfile</span>
+    <pre><code># Use an official Python runtime as a parent image
+FROM python:3.9-slim
+
+# Set the working directory inside the container
+WORKDIR /app
+
+# Copy the requirements file into the container at /app
+COPY requirements.txt .
+
+# Install any needed packages specified in requirements.txt
+# --no-cache-dir ensures we don't store the pip cache, keeping the image small
+# --trusted-host is used to avoid SSL issues with pypi.org in some networks
+RUN pip install --no-cache-dir --trusted-host pypi.python.org -r requirements.txt
+
+# Copy the rest of the application code into the container at /app
+COPY . .
+
+# Make port 5000 available to the world outside this container
+# This is the port your Flask app runs on
+EXPOSE 5000
+
+# Define the command to run your app
+# This will execute "python flask-api.py" when the container launches
+CMD ["python", "flask-api.py"]
+</code></pre>
+    <p><strong>Explanation of the Dockerfile (Option 1):</strong></p>
+    <ul>
+        <li><code>FROM python:3.9-slim</code>: This line specifies the base image for your Docker container. <code>python:3.9-slim</code> is a lightweight official Python 3.9 image, which is good for keeping your final image size small.</li>
+        <li><code>WORKDIR /app</code>: This command sets the working directory inside the container to <code>/app</code>. All subsequent commands (like <code>COPY</code> and <code>RUN</code>) will be executed relative to this directory.</li>
+        <li><code>COPY requirements.txt .</code>: This copies your <code>requirements.txt</code> file from your local project directory (the build context, indicated by <code>.</code>) into the <code>/app</code> directory inside the container.</li>
+        <li><code>RUN pip install --no-cache-dir --trusted-host pypi.python.org -r requirements.txt</code>: This command executes <code>pip install</code> to install all the Python packages listed in <code>requirements.txt</code>.
+            <ul>
+                <li><code>--no-cache-dir</code>: This flag tells pip not to store downloaded packages in a cache, which helps reduce the final image size.</li>
+                <li><code>--trusted-host pypi.python.org</code>: This can be useful in environments where SSL certificate verification might cause issues, ensuring pip can connect to the Python Package Index.</li>
+                <li><code>-r requirements.txt</code>: Specifies that pip should install packages from the provided file.</li>
+            </ul>
+        </li>
+        <li><code>COPY . .</code>: This copies all remaining files from your local project directory (excluding those specified in a <code>.dockerignore</code> file, if present) into the <code>/app</code> directory inside the container. This includes your <code>flask-api.py</code>.</li>
+        <li><code>EXPOSE 5000</code>: This instruction informs Docker that the container listens on port 5000 at runtime. It's primarily documentation; it doesn't actually publish the port. Port publishing is done when you run the container (e.g., with <code>-p</code> flag).</li>
+        <li><code>CMD ["python", "flask-api.py"]</code>: This defines the default command that will be executed when a container is started from this image. Here, it runs your Flask application using the Python interpreter.</li>
+    </ul>
+    <p>Your final project structure:</p>
+    <pre><code>my-flask-app/
+├── Dockerfile
+├── flask-api.py
+└── requirements.txt</code></pre>
+
+    <h2>Step 4: Build the Docker Image</h2>
+    <p>
+        Open a terminal or command prompt, navigate to your <code>my-flask-app</code> directory, and run the following command. This command builds a Docker image from your <code>Dockerfile</code> and tags it with the name <code>my-flask-api</code>.
+    </p>
+    <pre><code>docker build -t my-flask-api .</code></pre>
+    <p>
+        Don't forget the <code>.</code> at the end, which tells Docker to use the current directory as the build context.
+    </p>
+
+    <h2>Step 5: Run the Docker Container</h2>
+    <p>
+        Once the image is built, you can run it as a container with the following command:
+    </p>
+    <pre><code>docker run -d -p 5000:5000 my-flask-api</code></pre>
+    <ul>
+        <li><code>-d</code>: Runs the container in detached mode (in the background).</li>
+        <li><code>-p 5000:5000</code>: Maps port 5000 on your host machine to port 5000 in the container.</li>
+        <li><code>my-flask-api</code>: The name of the image to run.</li>
+    </ul>
+
+    <h2>Step 6: Verify It's Running</h2>
+    <p>
+        Your Flask API is now running inside a Docker container! You can access it by opening a web browser and navigating to:
+    </p>
+    <ul>
+        <li><strong>API Landing Page:</strong> <a href="http://localhost:5000/" target="_blank">http://localhost:5000/</a></li>
+        <li><strong>Sample API Request:</strong> <a href="http://localhost:5000/api?value=10" target="_blank">http://localhost:5000/api?value=10</a></li>
+    </ul>
+    <p>You should see the HTML description and the JSON response, respectively, served from your containerized application.</p>
+
+    <h2>Option 2: Production Deployment with Gunicorn and Nginx</h2>
+    <p>For production environments, it's recommended to use a robust WSGI server like Gunicorn to serve your Flask application, and a reverse proxy like Nginx to handle incoming requests, serve static files, and provide additional security and performance benefits.</p>
+
+    <h3>Updated Project Structure</h3>
+    <p>For this setup, you'll need a few more files:</p>
+    <pre><code>my-flask-app/
+├── Dockerfile             # For the Flask app with Gunicorn
+├── flask-api.py
+├── requirements.txt
+├── gunicorn_config.py     # Gunicorn configuration (optional but good practice)
+├── nginx.conf             # Nginx configuration
+└── docker-compose.yml     # Orchestrates both services</code></pre>
+
+    <h3>Step 2.1: Update <code>requirements.txt</code></h3>
+    <p>Add <code>gunicorn</code> to your <code>requirements.txt</code> file:</p>
+    <span class="filename">requirements.txt</span>
+    <pre><code>Flask
+gunicorn</code></pre>
+
+    <h3>Step 2.2: Create <code>gunicorn_config.py</code></h3>
+    <p>This file allows you to configure Gunicorn. Create <code>gunicorn_config.py</code> in your project root:</p>
+    <span class="filename">gunicorn_config.py</span>
+    <pre><code># gunicorn_config.py
+bind = "0.0.0.0:8000"
+workers = 4 # Adjust as needed based on your server's CPU cores (2-4 x CPU cores is a common starting point)
+timeout = 120 # Workers silent for more than this many seconds are killed and restarted
+keepalive = 5 # The number of seconds to wait for requests on a Keep-Alive connection.
+</code></pre>
+
+    <h3>Step 2.3: Create <code>nginx.conf</code></h3>
+    <p>This configuration tells Nginx to act as a reverse proxy, forwarding requests to your Gunicorn server. Create <code>nginx.conf</code> in your project root:</p>
+    <span class="filename">nginx.conf</span>
+    <pre><code>upstream flask_app {
+    server web:8000; # 'web' is the service name in docker-compose, 8000 is Gunicorn's port
+}
+
+server {
+    listen 80; # Nginx listens on port 80 inside the container
+
+    location / {
+        proxy_pass http://flask_app;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        # Optional: Add client_max_body_size if you expect large uploads
+        # client_max_body_size 10M;
+    }
+
+    # Optional: Serve static files directly via Nginx for better performance
+    # For this, you would need to configure Flask to serve static files from a specific path
+    # and then map that path in Nginx.
+    # For example, if Flask serves static from /app/static:
+    # location /static/ {
+    #     alias /app/static/;
+    # }
+}
+</code></pre>
+
+    <h3>Step 2.4: Create/Update <code>Dockerfile</code> for Gunicorn</h3>
+    <p>Your <code>Dockerfile</code> will be slightly modified to install Gunicorn and run your Flask app using Gunicorn instead of Flask's development server. Ensure this <code>Dockerfile</code> is in your project root.</p>
+    <span class="filename">Dockerfile</span>
+    <pre><code># Use an official Python runtime as a parent image
+FROM python:3.9-slim
+
+# Set the working directory inside the container
+WORKDIR /app
+
+# Copy the requirements file into the container at /app
+COPY requirements.txt .
+
+# Install any needed packages specified in requirements.txt
+RUN pip install --no-cache-dir --trusted-host pypi.python.org -r requirements.txt
+
+# Copy the rest of the application code and Gunicorn config into the container at /app
+COPY . .
+
+# Expose Gunicorn's port (default 8000)
+EXPOSE 8000
+
+# Command to run your app with Gunicorn
+# "flask-api:app" assumes your Flask app instance is named 'app' in flask-api.py
+CMD ["gunicorn", "-c", "gunicorn_config.py", "flask-api:app"]
+</code></pre>
+    <p><strong>Explanation of the Dockerfile (Option 2 - Gunicorn):</strong></p>
+    <ul>
+        <li><code>FROM python:3.9-slim</code>: Similar to Option 1, this sets the base image to a lightweight Python 3.9 environment.</li>
+        <li><code>WORKDIR /app</code>: Sets the working directory inside the container to <code>/app</code>.</li>
+        <li><code>COPY requirements.txt .</code>: Copies the <code>requirements.txt</code> file into the container.</li>
+        <li><code>RUN pip install --no-cache-dir --trusted-host pypi.python.org -r requirements.txt</code>: Installs all Python dependencies, which now includes <code>Flask</code> and <code>gunicorn</code>.</li>
+        <li><code>COPY . .</code>: Copies your application code (<code>flask-api.py</code>) and the Gunicorn configuration file (<code>gunicorn_config.py</code>) into the container.</li>
+        <li><code>EXPOSE 8000</code>: Informs Docker that the container will listen on port 8000. This is the default port Gunicorn will bind to.</li>
+        <li><code>CMD ["gunicorn", "-c", "gunicorn_config.py", "flask-api:app"]</code>: This command starts the Gunicorn WSGI HTTP server.
+            <ul>
+                <li><code>gunicorn</code>: The Gunicorn executable.</li>
+                <li><code>-c gunicorn_config.py</code>: Tells Gunicorn to load its configuration from the <code>gunicorn_config.py</code> file.</li>
+                <li><code>flask-api:app</code>: Specifies how Gunicorn should find your Flask application. It means "look for an application object named <code>app</code> within the Python module <code>flask-api</code> (which corresponds to your <code>flask-api.py</code> file)".</li>
+            </ul>
+        </li>
+    </ul>
+
+    <h3>Step 2.5: Create <code>docker-compose.yml</code></h3>
+    <p>This file defines and runs multi-container Docker applications. It will orchestrate both your Flask app (running with Gunicorn) and Nginx.</p>
+    <span class="filename">docker-compose.yml</span>
+    <pre><code>version: '3.8'
+
+services:
+  web:
+    build: .
+    # Use the Dockerfile in the current directory for the 'web' service
+    # volumes:
+    #   - .:/app # Optional: for live code changes during development (mounts host dir to container)
+    expose:
+      - "8000" # Expose port 8000 to other services in the Docker network
+    environment:
+      - FLASK_ENV=production # Set Flask environment
+
+  nginx:
+    image: nginx:latest
+    ports:
+      - "5000:80" # Map host port 5000 to Nginx's port 80
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro # Mount your Nginx config
+    depends_on:
+      - web # Ensure 'web' service starts before 'nginx'
+</code></pre>
+    <p><strong>Explanation of the <code>docker-compose.yml</code> (Option 2):</strong></p>
+    <ul>
+        <li><code>version: '3.8'</code>: Specifies the Docker Compose file format version. Using a recent version like '3.8' ensures access to the latest features and syntax.</li>
+        <li><code>services:</code>: This is the top-level key that defines all the services (containers) that make up your application.</li>
+        <li><code>web:</code>: Defines a service named <code>web</code>. This service will run your Flask application with Gunicorn.
+            <ul>
+                <li><code>build: .</code>: Instructs Docker Compose to build the Docker image for this service using the <code>Dockerfile</code> located in the current directory (<code>.</code>).</li>
+                <li><code>expose: - "8000"</code>: Exposes port 8000 from the <code>web</code> container to other linked services within the Docker network. This means the <code>nginx</code> service can communicate with the <code>web</code> service on port 8000, but port 8000 is *not* directly accessible from your host machine.</li>
+                <li><code>environment: - FLASK_ENV=production</code>: Sets an environment variable inside the <code>web</code> container. <code>FLASK_ENV=production</code> is a common practice to configure Flask for a production environment, which might disable debugging features and enable optimizations.</li>
+            </ul>
+        </li>
+        <li><code>nginx:</code>: Defines a service named <code>nginx</code>. This service will run the Nginx reverse proxy.
+            <ul>
+                <li><code>image: nginx:latest</code>: Specifies that Docker Compose should use the latest official Nginx image from Docker Hub for this service.</li>
+                <li><code>ports: - "5000:80"</code>: Maps port 5000 on your host machine to port 80 inside the <code>nginx</code> container. This is how you access your application from your web browser (e.g., <code>http://localhost:5000</code>). Nginx typically listens on port 80 for HTTP traffic.</li>
+                <li><code>volumes: - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro</code>: Mounts your local <code>nginx.conf</code> file into the <code>nginx</code> container.
+                    <ul>
+                        <li><code>./nginx.conf</code>: The path to your Nginx configuration file on your host machine.</li>
+                        <li><code>/etc/nginx/conf.d/default.conf</code>: The destination path inside the Nginx container where Nginx expects to find its main configuration.</li>
+                        <li><code>:ro</code>: Stands for "read-only," meaning the container cannot modify the host file.</li>
+                    </ul>
+                </li>
+                <li><code>depends_on: - web</code>: This ensures that the <code>web</code> service (your Flask application) is started and healthy before the <code>nginx</code> service attempts to start. This prevents Nginx from trying to proxy requests to a non-existent backend.</li>
+            </ul>
+        </li>
+    </ul>
+
+    <h3>Step 2.6: Build and Run with Docker Compose</h3>
+    <p>Navigate to your <code>my-flask-app</code> directory in the terminal and run:</p>
+    <pre><code>docker-compose build</code></pre>
+    <p>Then, to start the services:</p>
+    <pre><code>docker-compose up -d</code></pre>
+    <ul>
+        <li><code>-d</code>: Runs the containers in detached mode (in the background).</li>
+    </ul>
+    <p>To stop the services:</p>
+    <pre><code>docker-compose down</code></pre>
+
+    <h3>Step 2.7: Verification</h3>
+    <p>Your Flask API is now running in a production-like setup! You can access it by opening a web browser and navigating to:</p>
+    <ul>
+        <li><strong>API Landing Page:</strong> <a href="http://localhost:5000/" target="_blank">http://localhost:5000/</a></li>
+        <li><strong>Sample API Request:</strong> <a href="http://localhost:5000/api?value=10" target="_blank">http://localhost:5000/api?value=10</a></li>
+    </ul>
+    <p>Nginx is now handling the requests on port 5000 and forwarding them to your Gunicorn-served Flask application.</p>
+
+    <h2>Option 3: Single Multi-stage Docker Image with Nginx and Gunicorn</h2>
+    <p>This option demonstrates how to create a single, optimized Docker image that includes both your Gunicorn-served Flask application and Nginx as a reverse proxy. This approach leverages multi-stage builds to keep the final image size small and efficient, and provides instructions for pushing it to Docker Hub.</p>
+
+    <div class="note">
+        <h4>Why Multi-stage Builds?</h4>
+        <p>Multi-stage builds allow you to use multiple <code>FROM</code> statements in your Dockerfile. Each <code>FROM</code> instruction can use a different base image, and each starts a new stage of the build. You can selectively copy artifacts from one stage to another, leaving behind everything you don't need in the final image. This results in a much smaller and more secure production image.</p>
+    </div>
+
+    <h3>Updated Project Structure</h3>
+    <p>The project structure remains similar to Option 2, but we will only have one <code>Dockerfile</code> that handles everything:</p>
+    <pre><code>my-flask-app/
+├── Dockerfile             # Single multi-stage Dockerfile
+├── flask-api.py
+├── requirements.txt
+├── gunicorn_config.py
+├── nginx.conf
+└── entrypoint.sh          # Script to start both Gunicorn and Nginx</code></pre>
+
+    <h3>Step 3.1: Ensure <code>requirements.txt</code> and <code>gunicorn_config.py</code> are in place</h3>
+    <p>These files are the same as described in Option 2. Make sure they are present in your project root.</p>
+    <span class="filename">requirements.txt</span>
+    <pre><code>Flask
+gunicorn</code></pre>
+    <span class="filename">gunicorn_config.py</span>
+    <pre><code># gunicorn_config.py
+bind = "0.0.0.0:8000"
+workers = 4
+timeout = 120
+keepalive = 5
+</code></pre>
+
+    <h3>Step 3.2: Ensure <code>nginx.conf</code> is in place</h3>
+    <p>This file is also the same as described in Option 2. It configures Nginx to proxy requests to Gunicorn.</p>
+    <span class="filename">nginx.conf</span>
+    <pre><code>upstream flask_app {
+    server 127.0.0.1:8000; # Gunicorn will run on localhost within the same container
+}
+
+server {
+    listen 80;
+
+    location / {
+        proxy_pass http://flask_app;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+</code></pre>
+
+    <h3>Step 3.3: Create <code>entrypoint.sh</code></h3>
+    <p>Since we're running both Gunicorn and Nginx in a single container, we need a script to start both processes. Create <code>entrypoint.sh</code> in your project root:</p>
+    <span class="filename">entrypoint.sh</span>
+    <pre><code>#!/bin/sh
+# Start Gunicorn in the background
+gunicorn -c gunicorn_config.py flask-api:app &
+
+# Start Nginx in the foreground
+nginx -g "daemon off;"
+
+# Wait for any process to exit
+wait -n
+
+# Exit with status of process that exited first
+exit $?
+</code></pre>
+    <p><strong>Explanation of the <code>entrypoint.sh</code> script (Option 3):</strong></p>
+    <ul>
+        <li><code>#!/bin/sh</code>: This is the "shebang" line, which tells the operating system to execute the script using the <code>/bin/sh</code> interpreter.</li>
+        <li><code>gunicorn -c gunicorn_config.py flask-api:app &</code>: This command starts the Gunicorn server.
+            <ul>
+                <li><code>gunicorn -c gunicorn_config.py flask-api:app</code>: Configures and starts Gunicorn to serve your Flask application.</li>
+                <li><code>&</code>: This crucial symbol runs the Gunicorn process in the background. This allows the script to continue to the next command (starting Nginx) without waiting for Gunicorn to finish.</li>
+            </ul>
+        </li>
+        <li><code>nginx -g "daemon off;"</code>: This command starts the Nginx web server.
+            <ul>
+                <li><code>nginx</code>: The Nginx executable.</li>
+                <li><code>-g "daemon off;"</code>: This tells Nginx to run in the foreground. In Docker, the main process of the container must run in the foreground. If Nginx were to daemonize (run in the background), Docker would think the container's main process has exited and would stop the container.</li>
+            </ul>
+        </li>
+        <li><code>wait -n</code>: This command waits for any background job to complete. In this script, it specifically waits for the Gunicorn process (which was started with <code>&</code>) to exit. If Gunicorn crashes, <code>wait -n</code> will detect it, and the script will proceed to the next line.</li>
+        <li><code>exit $?</code>: This command exits the script with the exit status of the last executed command (or the command that <code>wait -n</code> reported). This is important because it propagates the exit status of either Gunicorn or Nginx to the Docker container. If one of them fails, the container will exit with a non-zero status, indicating an error to Docker.</li>
+    </ul>
+
+    <h3>Step 3.4: Create the Multi-stage <code>Dockerfile</code></h3>
+    <p>This <code>Dockerfile</code> will build your Python application in one stage and then combine it with Nginx in a final, lean image.</p>
+    <span class="filename">Dockerfile</span>
+    <pre><code># --- Stage 1: Build Python Application with Gunicorn ---
+FROM python:3.9-slim AS python-builder
+
+WORKDIR /app
+
+# Copy requirements and install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir --trusted-host pypi.python.org -r requirements.txt
+
+# Copy the application code and Gunicorn config
+COPY . .
+
+# --- Final Stage: Combine Nginx and Gunicorn ---
+FROM nginx:stable-alpine
+
+# Remove default Nginx config
+RUN rm /etc/nginx/conf.d/default.conf
+
+# Copy Nginx config from the build context
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+# Copy Python application from python-builder stage
+# This includes the installed packages and your application code
+COPY --from=python-builder /usr/local/bin/gunicorn /usr/local/bin/gunicorn
+COPY --from=python-builder /usr/local/lib/python3.9/site-packages /usr/local/lib/python3.9/site-packages
+COPY --from=python-builder /app /app
+
+WORKDIR /app
+
+# Expose Nginx's default HTTP port
+EXPOSE 80
+
+# Copy and set permissions for the entrypoint script
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# Use the entrypoint script to start both services
+ENTRYPOINT ["/entrypoint.sh"]
+</code></pre>
+    <p><strong>Explanation of the Multi-stage <code>Dockerfile</code> (Option 3):</strong></p>
+    <p>This Dockerfile uses a multi-stage build process to create a single, optimized image containing both your Flask application (served by Gunicorn) and Nginx.</p>
+    <h4>Stage 1: <code>python-builder</code></h4>
+    <ul>
+        <li><code>FROM python:3.9-slim AS python-builder</code>: This defines the first build stage, named <code>python-builder</code>. It uses a lightweight Python 3.9 image as its base. This stage is responsible for building your Python application and installing its dependencies.</li>
+        <li><code>WORKDIR /app</code>: Sets the working directory inside this stage to <code>/app</code>.</li>
+        <li><code>COPY requirements.txt .</code>: Copies your <code>requirements.txt</code> file into the <code>/app</code> directory of this stage.</li>
+        <li><code>RUN pip install --no-cache-dir --trusted-host pypi.python.org -r requirements.txt</code>: Installs all Python dependencies (Flask and Gunicorn) into this stage.</li>
+        <li><code>COPY . .</code>: Copies your Flask application code (<code>flask-api.py</code>) and Gunicorn configuration (<code>gunicorn_config.py</code>) into this stage.</li>
+    </ul>
+    <h4>Final Stage: Combining Nginx and Gunicorn</h4>
+    <ul>
+        <li><code>FROM nginx:stable-alpine</code>: This defines the final build stage. It uses a lightweight Nginx image based on Alpine Linux as its base. This stage will contain the final production image.</li>
+        <li><code>RUN rm /etc/nginx/conf.d/default.conf</code>: Removes the default Nginx configuration file provided by the base image, as we will be providing our own.</li>
+        <li><code>COPY nginx.conf /etc/nginx/conf.d/default.conf</code>: Copies your custom <code>nginx.conf</code> file from your local project directory (the build context) into the Nginx configuration directory inside the container.</li>
+        <li><code>COPY --from=python-builder /usr/local/bin/gunicorn /usr/local/bin/gunicorn</code>: This is a key part of multi-stage builds. It copies the Gunicorn executable from the <code>python-builder</code> stage into the final Nginx stage.</li>
+        <li><code>COPY --from=python-builder /usr/local/lib/python3.9/site-packages /usr/local/lib/python3.9/site-packages</code>: Copies all the Python packages (including Flask) that were installed in the <code>python-builder</code> stage into the final image.</li>
+        <li><code>COPY --from=python-builder /app /app</code>: Copies your application code (<code>flask-api.py</code>) and Gunicorn configuration (<code>gunicorn_config.py</code>) from the <code>python-builder</code> stage into the final image.</li>
+        <li><code>WORKDIR /app</code>: Sets the working directory for the final image to <code>/app</code>.</li>
+        <li><code>EXPOSE 80</code>: Informs Docker that the container will listen on port 80, which is Nginx's default HTTP port.</li>
+        <li><code>COPY entrypoint.sh /entrypoint.sh</code>: Copies your custom <code>entrypoint.sh</code> script into the root of the container.</li>
+        <li><code>RUN chmod +x /entrypoint.sh</code>: Makes the <code>entrypoint.sh</code> script executable.</li>
+        <li><code>ENTRYPOINT ["/entrypoint.sh"]</code>: Specifies that the <code>entrypoint.sh</code> script will be executed when the container starts. This script is responsible for starting both Gunicorn and Nginx.</li>
+    </ul>
+
+    <h3>Step 3.5: Build the Multi-stage Docker Image</h3>
+    <p>Navigate to your <code>my-flask-app</code> directory in the terminal and run the following command to build your single, optimized image:</p>
+    <pre><code>docker build -t your_dockerhub_username/my-flask-app-prod:latest .</code></pre>
+    <p>Replace <code>your_dockerhub_username</code> with your actual Docker Hub username.</p>
+
+    <h3>Step 3.6: Run the Multi-stage Container</h3>
+    <p>You can now run your combined application container:</p>
+    <pre><code>docker run -d -p 5000:80 your_dockerhub_username/my-flask-app-prod:latest</code></pre>
+    <ul>
+        <li><code>-d</code>: Runs the container in detached mode.</li>
+        <li><code>-p 5000:80</code>: Maps host port 5000 to Nginx's port 80 inside the container.</li>
+    </ul>
+
+    <h3>Step 3.7: Push to Docker Hub</h3>
+    <p>To share your image or deploy it to other environments, you can push it to Docker Hub:</p>
+    <ol>
+        <li><strong>Log in to Docker Hub:</strong>
+            <pre><code>docker login</code></pre>
+            <p>You will be prompted for your Docker Hub username and password.</p>
+        </li>
+        <li><strong>Push the image:</strong>
+            <pre><code>docker push your_dockerhub_username/my-flask-app-prod:latest</code></pre>
+        </li>
+    </ol>
+    <p>Once pushed, your image will be available on Docker Hub, and you can pull and run it on any machine with Docker installed.</p>
+
+    <h3>Step 3.8: Verification</h3>
+    <p>Your Flask API is now running in a single, optimized Docker container, served by Nginx and Gunicorn. You can access it by opening a web browser and navigating to:</p>
+    <ul>
+        <li><strong>API Landing Page:</strong> <a href="http://localhost:5000/" target="_blank">http://localhost:5000/</a></li>
+        <li><strong>Sample API Request:</strong> <a href="http://localhost:5000/api?value=10" target="_blank">http://localhost:5000/api?value=10</a></li>
+    </ul>
+
+</body>
+</html>
