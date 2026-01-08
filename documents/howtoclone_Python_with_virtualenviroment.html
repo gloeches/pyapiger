@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cloning a Python Project with a Virtual Environment</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            line-height: 1.6;
+            margin: 2em;
+        }
+        h1, h2 {
+            color: #333;
+        }
+        code {
+            background-color: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+        pre {
+            background-color: #f4f4f4;
+            padding: 1em;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Cloning a Python Project with a Virtual Environment</h1>
+
+    <h2>Why is the <code>.venv</code> folder not in GitHub?</h2>
+    <p>
+        When you work on a Python project, you'll notice that the virtual environment directory (commonly named <code>.venv</code>, <code>venv</code>, or <code>env</code>) is not included when you push your code to a repository like GitHub. This is intentional and is a standard best practice in software development.
+    </p>
+    <p>
+        The primary reasons for this are:
+    </p>
+    <ul>
+        <li><strong>Portability:</strong> A virtual environment can contain information specific to the operating system and Python version it was created with. An environment created on a Windows machine will not work on a macOS or Linux machine.</li>
+        <li><strong>Size:</strong> Virtual environments can become very large, containing many megabytes of library files. It is inefficient to store all of this in a source code repository.</li>
+        <li><strong>Consistency:</strong> The official list of a project's dependencies should be stored in a requirements file, typically <code>requirements.txt</code>. This file allows any developer to create a consistent environment with the exact same package versions.</li>
+    </ul>
+    <p>
+        The mechanism that prevents the folder from being uploaded is a file called <code>.gitignore</code>. This file lists files and directories that Git should ignore. In this project, a <code>.gitignore</code> file inside the <code>.venv</code> directory contains a wildcard (<code>*</code>) that tells Git to ignore everything within it.
+    </p>
+
+    <hr>
+
+    <h2>How to Set Up the Project After Cloning</h2>
+    <p>
+        Because the virtual environment is not included in the repository, every developer needs to create their own after cloning the project. Here is the standard workflow:
+    </p>
+
+    <ol>
+        <li>
+            <strong>Clone the repository:</strong>
+            <p>Download the project source code from GitHub to your local machine.</p>
+            <pre><code>git clone &lt;repository_url&gt;
+cd &lt;project_directory&gt;</code></pre>
+        </li>
+        <li>
+            <strong>Create the virtual environment:</strong>
+            <p>This command creates a new virtual environment folder. You can name it <code>.venv</code>, <code>venv</code>, or any other name.</p>
+            <pre><code>python -m venv .venv</code></pre>
+        </li>
+        <li>
+            <strong>Activate the environment:</strong>
+            <p>Activating the environment tells your shell to use the Python interpreter and packages inside this folder. The command differs based on your operating system.</p>
+            <p><em>On Windows:</em></p>
+            <pre><code>.venv\Scripts\activate</code></pre>
+            <p><em>On macOS and Linux:</em></p>
+            <pre><code>source .venv/bin/activate</code></pre>
+            <p>You will usually see the name of the environment in your command prompt (e.g., <code>(.venv)</code>) when it's active.</p>
+        </li>
+        <li>
+            <strong>Install the dependencies:</strong>
+            <p>This command reads the <code>requirements.txt</code> file and installs all the necessary packages into your newly activated virtual environment.</p>
+            <pre><code>pip install -r requirements.txt</code></pre>
+        </li>
+    </ol>
+
+    <p>
+        After completing these steps, you will have a local environment that mirrors the one used by other developers on the project, and you'll be ready to run the application and contribute code.
+    </p>
+
+</body>
+</html>
