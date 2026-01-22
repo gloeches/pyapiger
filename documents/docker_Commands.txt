@@ -1,0 +1,2 @@
+ docker build -f Dockerfileflask -t gloeches/flask-api:01.03 .
+ docker run -d --name flask-dev -p 2000:2000 -e API_PORT=2000 -e PRODUCTION=true  gloeches/flask-api:01.04

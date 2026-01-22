@@ -7,8 +7,8 @@ import time
 # create a Flask instance
 app = Flask(__name__)
 # Configure CORS
-# This will allow requests from http://localhost:4200 to all routes
-CORS(app, resources={r"/api/*": {"origins": "http://localhost:4200"}})
+# This will allow requests from any origin to all routes
+CORS(app, resources={r"/api/*": {"origins": "*"}})
 # Load configuration from config.json
 print(f"flask-api.py is opening config.json to load the configuration")   
 with open('config.json') as config_file:
@@ -60,7 +60,7 @@ def square():
         # or use the built in get method and assign a type
         # http://werkzeug.palletsprojects.com/en/0.15.x/datastructures/#werkzeug.datastructures.MultiDict.get
         value = request.args.get('value', type=int)
-        time.sleep(10)
+        time.sleep(3)
         return json.dumps({"description": "Value Squared", "value": value**2})
 
 if __name__ == "__main__":
