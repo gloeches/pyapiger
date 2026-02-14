@@ -72,34 +72,166 @@
     <h2>Prerequisites</h2>
     <ul>
         <li><strong>Docker Desktop</strong> installed and running on your machine.</li>
-        <li>Your <code>flask-api.py</code> file.</li>
     </ul>
 
     <h2>Step 1: Organize Your Project</h2>
     <p>
-        It's best practice to have a clean project directory. Create a new folder (e.g., <code>my-flask-app</code>) and place your <code>flask-api.py</code> file inside it.
+        It's best practice to have all your application files in a single project directory.
     </p>
     <pre><code>my-flask-app/
-└── flask-api.py</code></pre>
-
-    <h2>Step 2: Create a <code>requirements.txt</code> File</h2>
-    <p>
-        Your Flask application depends on the <code>Flask</code> library. Docker's build process needs to know which Python packages to install. Create a file named <code>requirements.txt</code> in the same directory.
-    </p>
-    <span class="filename">requirements.txt</span>
-    <pre><code>Flask</code></pre>
-    <p>Your project structure should now look like this:</p>
-    <pre><code>my-flask-app/
+├── Dockerfile
+├── config_generator.py
+├── entrypoint.sh
 ├── flask-api.py
 └── requirements.txt</code></pre>
 
+    <h2>Step 2: Review the Application Components</h2>
+
+    <h3>The Flask API (<code>flask-api.py</code>)</h3>
+    <p>This is your core Python application that serves the API. It reads its configuration from a <code>config.json</code> file.</p>
+
+    <h3>The Requirements File (<code>requirements.txt</code>)</h3>
+    <p>
+        This file lists the Python packages your application needs.
+    </p>
+    <span class="filename">requirements.txt</span>
+    <pre><code>Flask
+flask-cors</code></pre>
+
+    <h3>The Configuration Generator (<code>config_generator.py</code>)</h3>
+    <p>
+        This Python script dynamically generates the <code>config.json</code> file when the container starts. It reads environment variables to create the configuration.
+    </p>
+    <span class="filename">config_generator.py</span>
+    <pre><code>import os
+import json
+
+def generate_config():
+    production_env = os.environ.get("PRODUCTION", "false").lower() == "true"
+    api_port = os.environ.get("API_PORT", 5000)
+    
+    if production_env:
+        config_data = {"DDBB-SERVER": "PRODUCTION", "API-PORT": api_port}
+    else:
+        config_data = {"DDBB-SERVER": "DEVELOPMENT", "API-PORT": api_port}
+        
+    with open("config.json", "w") as config_file:
+        json.dump(config_data, config_file, indent=4)
+    print(f"El puerto es {api_port}")    
+    print(f"la compilación:  {production_env}")   
+if __name__ == "__main__":
+    print("Generating configuration file...")
+    generate_config()
+</code></pre>
+    <p>This script allows you to change the app's behavior at runtime by passing environment variables (<code>PRODUCTION</code> and <code>API_PORT</code>) to the `docker run` command.</p>
+
+    <h3>The Entrypoint Script (<code>entrypoint.sh</code>)</h3>
+    <p>
+        This shell script is the first thing that runs when the container starts. Its job is to prepare the environment and then run the main application.
+    </p>
+    <span class="filename">entrypoint.sh</span>
+    <pre><code>#!/bin/sh
+# entrypoint.sh
+
+# Run the config generator
+python config_generator.py
+
+# Now, execute the command passed to this script (the Dockerfile's CMD)
+exec "$@"
+</code></pre>
+    <p>The <code>exec "$@"</code> part is important. It replaces the shell process with the command passed as arguments, which in our case will be <code>python flask-api.py</code>. This ensures that the Python application becomes the main process of the container.</p>
+
     <h2>Step 3: Create the Dockerfile</h2>
     <p>
-        The <code>Dockerfile</code> is a script that contains instructions for building your Docker image. Create a file named <code>Dockerfile</code> (no extension) in your project directory.
+        The <code>Dockerfile</code> brings all these components together to build your container image.
     </p>
     <span class="filename">Dockerfile</span>
-    <pre><code># Use an official Python runtime as a parent image
-FROM python:3.9-slim
+    <pre><code># Use an official Python 3.13 runtime as a parent image
+FROM python:3.13-slim
+
+# Set the working directory inside the container
+WORKDIR /app
+
+# Add a build-time argument for the port
+ARG port=5000
+
+# Copy the requirements file into the container at /app
+COPY requirements.txt .
+
+# Install any needed packages specified in requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --upgrade pip
+
+# Copy the rest of the application code into the container at /app
+COPY . .
+
+# Make the entrypoint script executable
+RUN chmod +x entrypoint.sh
+
+# Make port available to the world outside this container
+EXPOSE $port
+
+# Set the entrypoint
+ENTRYPOINT ["./entrypoint.sh"]
+
+# Define the command to run your app
+CMD ["python", "flask-api.py"]
+</code></pre>
+    <p><strong>Explanation of the Dockerfile (Option 1):</strong></p>
+    <ul>
+        <li><code>FROM python:3.13-slim</code>: Specifies a lightweight Python 3.13 base image.</li>
+        <li><code>WORKDIR /app</code>: Sets the default directory for subsequent commands to <code>/app</code>.</li>
+        <li><code>ARG port=5000</code>: Defines a build-time variable for the port. This is used by the `EXPOSE` instruction.</li>
+        <li><code>COPY requirements.txt .</code> and <code>RUN pip install ...</code>: Copies the requirements file and installs the Python dependencies.</li>
+        <li><code>COPY . .</code>: Copies all your application files (<code>flask-api.py</code>, <code>config_generator.py</code>, <code>entrypoint.sh</code>, etc.) into the container.</li>
+        <li><code>RUN chmod +x entrypoint.sh</code>: Makes the entrypoint script executable so it can be run.</li>
+        <li><code>EXPOSE $port</code>: Informs Docker that the container will listen on the specified port at runtime.</li>
+        <li><code>ENTRYPOINT ["./entrypoint.sh"]</code>: This is the key instruction. It configures the container to run the <code>entrypoint.sh</code> script as its main process.</li>
+        <li><code>CMD ["python", "flask-api.py"]</code>: This provides the default command to the <code>ENTRYPOINT</code>. The <code>entrypoint.sh</code> script will execute this command using <code>exec "$@"</code> after it has finished its own tasks (like generating the config).</li>
+    </ul>
+
+    <h2>Step 4: Build the Docker Image</h2>
+    <p>
+        Open a terminal, navigate to your project directory, and run the build command:
+    </p>
+    <pre><code>docker build -t my-flask-api .</code></pre>
+
+    <h2>Step 5: Run the Docker Container</h2>
+    <p>
+        Now you can run the container. Since the application is configured by environment variables, you can easily change its behavior.
+    </p>
+    
+    <h3>Running in Development Mode</h3>
+    <p>This command runs the container, mapping your local port 5000 to the container's port 5000.</p>
+    <pre><code>docker run -d -p 5000:5000 --name my-api-dev my-flask-api</code></pre>
+    
+    <h3>Running in Production Mode on a Different Port</h3>
+    <p>Here, we pass environment variables using the <code>-e</code> flag to run in production mode and change the port to 8080.</p>
+    <pre><code>docker run -d -p 8080:8080 -e API_PORT=8080 -e PRODUCTION=true --name my-api-prod my-flask-api</code></pre>
+    <ul>
+        <li><code>-p 8080:8080</code>: Maps port 8080 on your host to port 8080 in the container.</li>
+        <li><code>-e API_PORT=8080</code>: Sets the <code>API_PORT</code> environment variable inside the container. The <code>config_generator.py</code> will use this to set the port in <code>config.json</code>.</li>
+        <li><code>-e PRODUCTION=true</code>: Sets the <code>PRODUCTION</code> environment variable to `true`, causing the config generator to set the `DDBB-SERVER` to "PRODUCTION".</li>
+    </ul>
+
+    <h2>Step 6: Verify It's Running</h2>
+    <p>
+        You can access your containerized API in a web browser. If you ran in production mode on port 8080, the URLs would be:
+    </p>
+    <ul>
+        <li><strong>API Landing Page:</strong> <a href="http://localhost:8080/" target="_blank">http://localhost:8080/</a></li>
+        <li><strong>Sample API Request:</strong> <a href="http://localhost:8080/api?value=10" target="_blank">http://localhost:8080/api?value=10</a></li>
+    </ul>
+
+    <div class="note">
+        <h3>Anexo: Adding a Health Check (for Option 1)</h3>
+        <p>
+            To make your container more robust, you can add a <code>HEALTHCHECK</code> instruction to your <code>Dockerfile</code>. This allows Docker to periodically check if your application is still healthy.
+        </p>
+        <p>Here is how you would modify the <strong>Option 1</strong> <code>Dockerfile</code> to include a health check:</p>
+        <span class="filename">Dockerfile (with Health Check)</span>
+        <pre><code># Use an official Python 3.13 runtime as a parent image
+FROM python:3.13-slim
 
 # Set the working directory inside the container
 WORKDIR /app
@@ -108,72 +240,58 @@ WORKDIR /app
 COPY requirements.txt .
 
 # Install any needed packages specified in requirements.txt
-# --no-cache-dir ensures we don't store the pip cache, keeping the image small
-# --trusted-host is used to avoid SSL issues with pypi.org in some networks
-RUN pip install --no-cache-dir --trusted-host pypi.python.org -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --upgrade pip
+
+# Install curl for the healthcheck
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 
 # Copy the rest of the application code into the container at /app
 COPY . .
 
-# Make port 5000 available to the world outside this container
-# This is the port your Flask app runs on
+# Make the entrypoint script executable
+RUN chmod +x entrypoint.sh
+
+# Make port available to the world outside this container
 EXPOSE 5000
 
+# Add a health check
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:${API_PORT}/ || exit 1
+
+# Set the entrypoint
+ENTRYPOINT ["./entrypoint.sh"]
+
 # Define the command to run your app
-# This will execute "python flask-api.py" when the container launches
 CMD ["python", "flask-api.py"]
 </code></pre>
-    <p><strong>Explanation of the Dockerfile (Option 1):</strong></p>
-    <ul>
-        <li><code>FROM python:3.9-slim</code>: This line specifies the base image for your Docker container. <code>python:3.9-slim</code> is a lightweight official Python 3.9 image, which is good for keeping your final image size small.</li>
-        <li><code>WORKDIR /app</code>: This command sets the working directory inside the container to <code>/app</code>. All subsequent commands (like <code>COPY</code> and <code>RUN</code>) will be executed relative to this directory.</li>
-        <li><code>COPY requirements.txt .</code>: This copies your <code>requirements.txt</code> file from your local project directory (the build context, indicated by <code>.</code>) into the <code>/app</code> directory inside the container.</li>
-        <li><code>RUN pip install --no-cache-dir --trusted-host pypi.python.org -r requirements.txt</code>: This command executes <code>pip install</code> to install all the Python packages listed in <code>requirements.txt</code>.
-            <ul>
-                <li><code>--no-cache-dir</code>: This flag tells pip not to store downloaded packages in a cache, which helps reduce the final image size.</li>
-                <li><code>--trusted-host pypi.python.org</code>: This can be useful in environments where SSL certificate verification might cause issues, ensuring pip can connect to the Python Package Index.</li>
-                <li><code>-r requirements.txt</code>: Specifies that pip should install packages from the provided file.</li>
-            </ul>
-        </li>
-        <li><code>COPY . .</code>: This copies all remaining files from your local project directory (excluding those specified in a <code>.dockerignore</code> file, if present) into the <code>/app</code> directory inside the container. This includes your <code>flask-api.py</code>.</li>
-        <li><code>EXPOSE 5000</code>: This instruction informs Docker that the container listens on port 5000 at runtime. It's primarily documentation; it doesn't actually publish the port. Port publishing is done when you run the container (e.g., with <code>-p</code> flag).</li>
-        <li><code>CMD ["python", "flask-api.py"]</code>: This defines the default command that will be executed when a container is started from this image. Here, it runs your Flask application using the Python interpreter.</li>
-    </ul>
-    <p>Your final project structure:</p>
-    <pre><code>my-flask-app/
-├── Dockerfile
-├── flask-api.py
-└── requirements.txt</code></pre>
-
-    <h2>Step 4: Build the Docker Image</h2>
-    <p>
-        Open a terminal or command prompt, navigate to your <code>my-flask-app</code> directory, and run the following command. This command builds a Docker image from your <code>Dockerfile</code> and tags it with the name <code>my-flask-api</code>.
-    </p>
-    <pre><code>docker build -t my-flask-api .</code></pre>
-    <p>
-        Don't forget the <code>.</code> at the end, which tells Docker to use the current directory as the build context.
-    </p>
-
-    <h2>Step 5: Run the Docker Container</h2>
-    <p>
-        Once the image is built, you can run it as a container with the following command:
-    </p>
-    <pre><code>docker run -d -p 5000:5000 my-flask-api</code></pre>
-    <ul>
-        <li><code>-d</code>: Runs the container in detached mode (in the background).</li>
-        <li><code>-p 5000:5000</code>: Maps port 5000 on your host machine to port 5000 in the container.</li>
-        <li><code>my-flask-api</code>: The name of the image to run.</li>
-    </ul>
-
-    <h2>Step 6: Verify It's Running</h2>
-    <p>
-        Your Flask API is now running inside a Docker container! You can access it by opening a web browser and navigating to:
-    </p>
-    <ul>
-        <li><strong>API Landing Page:</strong> <a href="http://localhost:5000/" target="_blank">http://localhost:5000/</a></li>
-        <li><strong>Sample API Request:</strong> <a href="http://localhost:5000/api?value=10" target="_blank">http://localhost:5000/api?value=10</a></li>
-    </ul>
-    <p>You should see the HTML description and the JSON response, respectively, served from your containerized application.</p>
+        <h4>Explanation of the Changes:</h4>
+        <ul>
+            <li>
+                <strong>Installing curl:</strong>
+                <pre><code>RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*</code></pre>
+                <p>We add this line to install the <code>curl</code> command-line tool, which the health check uses to send a request to the web server.</p>
+            </li>
+            <li>
+                <strong>The HEALTHCHECK Instruction:</strong>
+                <pre><code>HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 
+  CMD curl -f http://localhost:${API_PORT}/ || exit 1</code></pre>
+                <p>This command tells Docker to run <code>curl -f http://localhost:${port}/ || exit 1</code> every 30 seconds to check if the application is responding correctly. Let's break it down:</p>
+                <ul>
+                    <li><code>curl -f http://localhost:${API_PORT}/</code>: It uses the <code>curl</code> tool to make an HTTP request to your application running on <code>localhost</code> inside the container. Crucially, it uses the <strong><code>API_PORT</code> environment variable</strong> to determine which port to probe. This allows you to dynamically set the application's port during <code>docker run</code> using the <code>-e API_PORT=&lt;your_port&gt;</code> flag. The <code>-f</code> (or <code>--fail</code>) flag is important: it tells curl to return a non-zero exit code if the server responds with an HTTP error code (like 404 or 500), but to not print the response body.</li>
+                    <li><code>|| exit 1</code>: This is a shell "OR" operator. It means: "If the command on the left (<code>curl</code>) fails (returns a non-zero exit code), then execute the command on the right (<code>exit 1</code>)."</li>
+                </ul>
+                <p><strong>Why <code>exit 1</code>?</strong></p>
+                <p>Docker's health check mechanism relies on the exit code of the command:</p>
+                <ul>
+                    <li><strong>Exit Code 0:</strong> Success. The container is considered "healthy".</li>
+                    <li><strong>Exit Code 1 (or any non-zero):</strong> Failure. The container is considered "unhealthy".</li>
+                </ul>
+                <p>When your application is running correctly, <code>curl -f</code> will get a successful response (like HTTP 200 OK), and it will exit with code <strong>0</strong>. The <code>|| exit 1</code> part is ignored, and Docker sees the "healthy" signal.</p>
+                <p>If your application has crashed or is returning an error, <code>curl -f</code> will fail and exit with a non-zero code (e.g., 22 for a 404 error). The shell sees this failure, and the <code>||</code> operator triggers the <code>exit 1</code> command. This ensures that Docker receives a clear "unhealthy" signal (exit code 1). After a configured number of retries, Docker can then take action, such as restarting the container.</p>
+            </li>
+        </ul>
+    </div>
 
     <h2>Option 2: Production Deployment with Gunicorn and Nginx</h2>
     <p>For production environments, it's recommended to use a robust WSGI server like Gunicorn to serve your Flask application, and a reverse proxy like Nginx to handle incoming requests, serve static files, and provide additional security and performance benefits.</p>
